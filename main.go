@@ -14,6 +14,8 @@ func main() {
 
 	fmt.Printf("Attempting to serve at: %s", server.Addr)
 
+	mux.Handle("/", http.FileServer(http.Dir(".")))
+	mux.Handle("/assets", http.FileServer(http.Dir("/assets/logo.png")))
 	err := server.ListenAndServe()
 
 	if err != nil {
