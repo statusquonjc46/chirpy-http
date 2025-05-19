@@ -5,6 +5,12 @@ import (
 	"net/http"
 )
 
+func HealthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("OK"))
+}
+
 func main() {
 	mux := http.NewServeMux()
 	server := &http.Server{
@@ -14,8 +20,8 @@ func main() {
 
 	fmt.Printf("Attempting to serve at: %s", server.Addr)
 
-	mux.Handle("/", http.FileServer(http.Dir(".")))
-	mux.Handle("/assets", http.FileServer(http.Dir("/assets/logo.png")))
+	mux.Handle("/app/", http.StripPrefix("/app", http.FileServer(http.Dir("."))))
+	mux.HandleFunc("/healthz", HealthHandler)
 	err := server.ListenAndServe()
 
 	if err != nil {
