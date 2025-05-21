@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 )
 
@@ -43,8 +44,8 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 	type returnErr struct {
 		Error string `json:"error"`
 	}
-	type returnValid struct {
-		Valid bool `json:"valid"`
+	type returnClean struct {
+		CleanedBody string `json:"cleaned_body"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -64,10 +65,26 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Error decoding parameters: %s\n", err)
 		return
 	}
-
-	chirpLen := len(params.Body)
+	strBody := params.Body
+	chirpLen := len(strBody)
 	if chirpLen < 140 {
-		rtn := &returnValid{Valid: true}
+		bannedWords := []string{"kerfuffle", "sharbert", "fornax"}
+		censor := "****"
+		rtnStr := strBody
+		for _, sub := range bannedWords {
+			uppedSub := strings.ToUpper(string(sub[0])) + sub[1:]
+			fmt.Println(uppedSub)
+			if strings.Contains(rtnStr, sub) {
+				rtnStr = strings.Replace(rtnStr, sub, censor, -1)
+			} else if strings.Contains(rtnStr, strings.ToUpper(sub)) {
+				rtnStr = strings.Replace(rtnStr, sub, censor, -1)
+			} else if strings.Contains(rtnStr, uppedSub) {
+				rtnStr = strings.Replace(rtnStr, uppedSub, censor, -1)
+				fmt.Println("uppedSub triggered")
+			}
+		}
+		fmt.Println(rtnStr)
+		rtn := &returnClean{CleanedBody: rtnStr}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
 			fmt.Printf("Error marshalling json: %s\n", err)
@@ -77,7 +94,7 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
 		w.Write(dat)
-		fmt.Printf("Chirp: %s | Length: %d\n", params.Body, chirpLen)
+		fmt.Printf("Chirp: %s | Length: %d\n", strBody, chirpLen)
 	} else {
 		overage := chirpLen - 140
 		rtn := &returnErr{Error: "chirp is too long"}
