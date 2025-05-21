@@ -9,6 +9,7 @@ import (
 // Server Health Function
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
@@ -16,6 +17,7 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) metricHandler(w http.ResponseWriter, r *http.Request) {
 	hits := fmt.Sprintf("Hits: %d", cfg.fileserverHits.Load())
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(hits))
 
@@ -24,6 +26,7 @@ func (cfg *apiConfig) metricHandler(w http.ResponseWriter, r *http.Request) {
 func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	cfg.fileserverHits.Store(0)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
 }
@@ -52,9 +55,9 @@ func main() {
 
 	//connection handlers
 	mux.Handle("/app/", cfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
-	mux.HandleFunc("/healthz", HealthHandler)
-	mux.HandleFunc("/metrics", cfg.metricHandler)
-	mux.HandleFunc("/reset", cfg.resetHandler)
+	mux.HandleFunc("GET /healthz", HealthHandler)
+	mux.HandleFunc("GET /metrics", cfg.metricHandler)
+	mux.HandleFunc("POST /reset", cfg.resetHandler)
 	//Serve content on connection
 	err := server.ListenAndServe()
 	if err != nil {
