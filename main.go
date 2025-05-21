@@ -1,9 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/statusquonjc46/chirpy-http/internal/database"
+	"log"
 	"net/http"
+	"os"
 	"strings"
 	"sync/atomic"
 )
@@ -125,17 +131,27 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 // struct for api site hits
 type apiConfig struct {
 	fileserverHits atomic.Int32
+	database       *database.Queries
 }
 
 func main() {
 	//var instantiation
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	mux := http.NewServeMux() //instantiate the server mux
 	server := &http.Server{   //create the http server
 		Addr:    ":8080",
 		Handler: mux,
 	}
-	cfg := &apiConfig{} //instantiate an instance of apiConfig struct
 
+	cfg := &apiConfig{} //instantiate an instance of apiConfig struct
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	dbQueries := database.New(db)
+	fmt.Println(dbQueries)
 	fmt.Printf("Attempting to serve at: %s\n", server.Addr)
 
 	//connection handlers/rputers
@@ -146,7 +162,7 @@ func main() {
 	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
 
 	//Serve content on connection
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err != nil {
 		fmt.Printf("Failed at ListenAndServe: %s", err)
 	}
