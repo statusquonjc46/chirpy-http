@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/statusquonjc46/chirpy-http/internal/database"
@@ -12,11 +13,12 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 )
 
 // HANDLERS FOR ENDPOINTS
 // Server Health Function
-func HealthHandler(w http.ResponseWriter, r *http.Request) {
+func healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache control", "no-cache")
 	w.WriteHeader(http.StatusOK)
@@ -35,11 +37,82 @@ func (cfg *apiConfig) metricHandler(w http.ResponseWriter, r *http.Request) {
 
 // Resets the count on /metrics instead of neededing to restart server
 func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
+	platform := cfg.platform
+	if platform != "dev" {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache control", "no-cache")
+		w.WriteHeader(403)
+		w.Write([]byte("403 Forbidden"))
+		return
+	}
+	cfg.database.DeleteUsers(r.Context())
 	cfg.fileserverHits.Store(0)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache control", "no-cache")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email string `json:"email"`
+	}
+	type Errors struct {
+		Error string `json:"error"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		rtn := &Errors{Error: "something went wrong"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Error decoding json %s\n", err)
+			w.WriteHeader(400)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		w.Write(dat)
+		fmt.Printf("Error decoding parameters: %s\n", err)
+		return
+	}
+
+	email := sql.NullString{String: params.Email, Valid: true}
+	fmt.Println(email)
+	user, err := cfg.database.CreateUser(r.Context(), email)
+	fmt.Println(user)
+	if err != nil {
+		rtn := &Errors{Error: "failed to add user to db"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Error marshalling json %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		fmt.Printf("Error adding user to DB: %s\n", err)
+		return
+	}
+	ret := &User{
+		ID:        user.ID,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+		Email:     user.Email.String,
+	}
+
+	dat, err := json.Marshal(ret)
+	if err != nil {
+		fmt.Printf("Error marshalling json: %s\n", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	w.Write(dat)
 }
 
 // validates chirp char lengths
@@ -132,6 +205,14 @@ func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	database       *database.Queries
+	platform       string
+}
+
+type User struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Email     string    `json:"email"`
 }
 
 func main() {
@@ -149,17 +230,20 @@ func main() {
 
 	cfg := &apiConfig{} //instantiate an instance of apiConfig struct
 	dbURL := os.Getenv("DB_URL")
+	cfg.platform = os.Getenv("PLATFORM")
 	db, err := sql.Open("postgres", dbURL)
 	dbQueries := database.New(db)
-	fmt.Println(dbQueries)
+	cfg.database = dbQueries
+
 	fmt.Printf("Attempting to serve at: %s\n", server.Addr)
 
 	//connection handlers/rputers
 	mux.Handle("/app/", cfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
-	mux.HandleFunc("GET /api/healthz", HealthHandler)
+	mux.HandleFunc("GET /api/healthz", healthHandler)
 	mux.HandleFunc("GET /admin/metrics", cfg.metricHandler)
 	mux.HandleFunc("POST /admin/reset", cfg.resetHandler)
 	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+	mux.HandleFunc("POST /api/users", cfg.addUserHandler)
 
 	//Serve content on connection
 	err = server.ListenAndServe()
