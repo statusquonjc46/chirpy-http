@@ -53,6 +53,7 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
+// Takes a POST request to create a user, adds to the users table, then returns the users row from the DB
 func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Email string `json:"email"`
@@ -115,7 +116,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(dat)
 }
 
-// validates chirp char lengths
+// validates chirp char lengths, censors banned words, then puts the full chirp in the chirp DB, and returns the full chirp
 func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
 		Body   string `json:"body"`
@@ -166,6 +167,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//valid chirp logic
 	chirpLen := len(strBody) //get length of body to check if 140 chars
 	if chirpLen <= 140 {     //if less than or equal to 140, check for banned words, create a cleaned body
 		bannedWords := []string{"kerfuffle", "sharbert", "fornax"}
@@ -173,14 +175,12 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		cleanBody := strBody
 		for _, sub := range bannedWords {
 			uppedSub := strings.ToUpper(string(sub[0])) + sub[1:]
-			fmt.Println(uppedSub)
 			if strings.Contains(cleanBody, sub) {
 				cleanBody = strings.Replace(cleanBody, sub, censor, -1)
 			} else if strings.Contains(cleanBody, strings.ToUpper(sub)) {
 				cleanBody = strings.Replace(cleanBody, sub, censor, -1)
 			} else if strings.Contains(cleanBody, uppedSub) {
 				cleanBody = strings.Replace(cleanBody, uppedSub, censor, -1)
-				fmt.Println("uppedSub triggered")
 			}
 		}
 		fmt.Println(cleanBody)
@@ -197,7 +197,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(500)
+			w.WriteHeader(503)
 			w.Write(dat)
 			return
 		}
@@ -216,9 +216,9 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 			CreatedAt: createChirp.CreatedAt,
 			UpdatedAt: createChirp.UpdatedAt,
 			Body:      createChirp.Body,
-			UserID:    createChirp.UserID.UUID,
+			UserID:    userID,
 		}
-		//marshal chirp
+		//marshal chirp, return the chirp, or return error
 		dat, err := json.Marshal(chirp)
 
 		if err != nil {
@@ -230,8 +230,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(201)
 		w.Write(dat)
 		fmt.Printf("Chirp added to DB successfully\nChirp: %s | Length: %d \n", strBody, chirpLen)
-		fmt.Printf("%S", chirp)
-	} else {
+	} else { //chirp length is too logn error response
 		overage := chirpLen - 140
 		rtn := &returnErr{Error: "chirp is too long"}
 		dat, err := json.Marshal(rtn)
@@ -247,6 +246,68 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Error: %d is greater than 140 characters by %d\n", chirpLen, overage)
 		return
 	}
+}
+
+// Get all Chirps from chirps table, return the array of chirps
+func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	allChirps, err := cfg.database.GetAllChirps(r.Context())
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to query DB for all chirps"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal all chirp query error: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	var jsonFormattedChirps []Chirp
+	for _, row := range allChirps {
+
+		var userID uuid.UUID
+		if row.UserID.Valid {
+			userID = row.UserID.UUID
+		} else {
+			fmt.Printf("Error: user id is nil: %s", userID)
+			continue
+		}
+
+		ch := Chirp{
+			ID:        row.ID,
+			CreatedAt: row.CreatedAt,
+			UpdatedAt: row.UpdatedAt,
+			Body:      row.Body,
+			UserID:    userID,
+		}
+
+		jsonFormattedChirps = append(jsonFormattedChirps, ch)
+	}
+
+	returnChirp, err := json.Marshal(jsonFormattedChirps)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to marshal Array of Chirps"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal Array of Chirps error: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(returnChirp)
 }
 
 // MIDDLEWARE
@@ -309,6 +370,7 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", cfg.resetHandler)
 	mux.HandleFunc("POST /api/chirps", cfg.addChirp)
 	mux.HandleFunc("POST /api/users", cfg.addUserHandler)
+	mux.HandleFunc("GET /api/chirps", cfg.getAllChirps)
 
 	//Serve content on connection
 	err = server.ListenAndServe()
