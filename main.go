@@ -87,7 +87,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &Errors{Error: "failed to add user to db"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json %s\n", err)
+			fmt.Printf("Error marshalling json for adding user to DB: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -106,7 +106,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	dat, err := json.Marshal(ret)
 	if err != nil {
-		fmt.Printf("Error marshalling json: %s\n", err)
+		fmt.Printf("Error marshalling json for user Struct: %s\n", err)
 		w.WriteHeader(500)
 		return
 	}
@@ -116,17 +116,20 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // validates chirp char lengths
-func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
+func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Body string `json:"body"`
+		Body   string `json:"body"`
+		UserID string `json:"user_id"`
 	}
 	type returnErr struct {
 		Error string `json:"error"`
 	}
-	type returnClean struct {
-		CleanedBody string `json:"cleaned_body"`
+	type chirpParams struct {
+		Body   string
+		UserID uuid.UUID
 	}
 
+	//Decode POST data
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
 	err := decoder.Decode(&params)
@@ -134,7 +137,7 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErr{Error: "something went wrong"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json %s\n", err)
+			fmt.Printf("Error marshalling json for POST data %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -144,36 +147,90 @@ func validateChirpHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Error decoding parameters: %s\n", err)
 		return
 	}
+
+	//check for banned words, then return the cleaned string
 	strBody := params.Body
-	chirpLen := len(strBody)
-	if chirpLen < 140 {
+	userID, err := uuid.Parse(params.UserID) //parse string to UUID
+	if err != nil {
+		rtn := &returnErr{Error: "unable to parse uuid from json POST"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Error marshalling json for chirp parameters %s\n", err)
+			w.WriteHeader(400)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		w.Write(dat)
+		fmt.Printf("UserID was not able to be parses from string to UUID: %s\n", err)
+		return
+	}
+
+	chirpLen := len(strBody) //get length of body to check if 140 chars
+	if chirpLen <= 140 {     //if less than or equal to 140, check for banned words, create a cleaned body
 		bannedWords := []string{"kerfuffle", "sharbert", "fornax"}
 		censor := "****"
-		rtnStr := strBody
+		cleanBody := strBody
 		for _, sub := range bannedWords {
 			uppedSub := strings.ToUpper(string(sub[0])) + sub[1:]
 			fmt.Println(uppedSub)
-			if strings.Contains(rtnStr, sub) {
-				rtnStr = strings.Replace(rtnStr, sub, censor, -1)
-			} else if strings.Contains(rtnStr, strings.ToUpper(sub)) {
-				rtnStr = strings.Replace(rtnStr, sub, censor, -1)
-			} else if strings.Contains(rtnStr, uppedSub) {
-				rtnStr = strings.Replace(rtnStr, uppedSub, censor, -1)
+			if strings.Contains(cleanBody, sub) {
+				cleanBody = strings.Replace(cleanBody, sub, censor, -1)
+			} else if strings.Contains(cleanBody, strings.ToUpper(sub)) {
+				cleanBody = strings.Replace(cleanBody, sub, censor, -1)
+			} else if strings.Contains(cleanBody, uppedSub) {
+				cleanBody = strings.Replace(cleanBody, uppedSub, censor, -1)
 				fmt.Println("uppedSub triggered")
 			}
 		}
-		fmt.Println(rtnStr)
-		rtn := &returnClean{CleanedBody: rtnStr}
-		dat, err := json.Marshal(rtn)
+		fmt.Println(cleanBody)
+
+		//insert chirp to DB, save chirp to Chirp struct, r.context for ID, CreatedAt, UpdatedAt, cleanBody for cleanedbody
+		addChirpParams := database.AddChirpParams{Body: cleanBody, UserID: uuid.NullUUID{UUID: userID, Valid: true}}
+		createChirp, err := cfg.database.AddChirp(r.Context(), addChirpParams)
 		if err != nil {
-			fmt.Printf("Error marshalling json: %s\n", err)
+			rtn := &returnErr{Error: "Failed to Add Chirp to DB"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("Error marshalling chirp DB failure: %s\n", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(500)
+			w.Write(dat)
+			return
+		}
+		//get user_id from DB, check if Valid is true before setting user_id in chirp struct
+		var userID uuid.UUID
+		if createChirp.UserID.Valid {
+			userID = createChirp.UserID.UUID
+		} else {
+			userID = uuid.Nil
+			fmt.Printf("Error: user id is nil: %s", userID)
+		}
+
+		//create chirp instance with chirp data
+		chirp := &Chirp{
+			ID:        createChirp.ID,
+			CreatedAt: createChirp.CreatedAt,
+			UpdatedAt: createChirp.UpdatedAt,
+			Body:      createChirp.Body,
+			UserID:    createChirp.UserID.UUID,
+		}
+		//marshal chirp
+		dat, err := json.Marshal(chirp)
+
+		if err != nil {
+			fmt.Printf("Error marshalling json for chirp: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(201)
 		w.Write(dat)
-		fmt.Printf("Chirp: %s | Length: %d\n", strBody, chirpLen)
+		fmt.Printf("Chirp added to DB successfully\nChirp: %s | Length: %d \n", strBody, chirpLen)
+		fmt.Printf("%S", chirp)
 	} else {
 		overage := chirpLen - 140
 		rtn := &returnErr{Error: "chirp is too long"}
@@ -215,6 +272,14 @@ type User struct {
 	Email     string    `json:"email"`
 }
 
+type Chirp struct {
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Body      string    `json:"body"`
+	UserID    uuid.UUID `json:"user_id"`
+}
+
 func main() {
 	//var instantiation
 	err := godotenv.Load()
@@ -242,7 +307,7 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", healthHandler)
 	mux.HandleFunc("GET /admin/metrics", cfg.metricHandler)
 	mux.HandleFunc("POST /admin/reset", cfg.resetHandler)
-	mux.HandleFunc("POST /api/validate_chirp", validateChirpHandler)
+	mux.HandleFunc("POST /api/chirps", cfg.addChirp)
 	mux.HandleFunc("POST /api/users", cfg.addUserHandler)
 
 	//Serve content on connection
