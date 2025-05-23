@@ -310,6 +310,76 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 	w.Write(returnChirp)
 }
 
+// Get a single ID specifc Chirp if it exists
+func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to convert string Id from PathValue to uuid.UUID"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal string ID to uuid.UUID error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		return
+	}
+
+	chirpAtID, err := cfg.database.GetSpecificChirp(r.Context(), chirpID)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to query DB for chirpID"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal error from getting specific chirp from DB: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	var userID uuid.UUID
+	if chirpAtID.UserID.Valid {
+		userID = chirpAtID.UserID.UUID
+	} else {
+		fmt.Printf("Error: user id is nil: %s\n", userID)
+	}
+	ch := Chirp{
+		ID:        chirpAtID.ID,
+		CreatedAt: chirpAtID.CreatedAt,
+		UpdatedAt: chirpAtID.UpdatedAt,
+		Body:      chirpAtID.Body,
+		UserID:    userID,
+	}
+
+	returnChirp, err := json.Marshal(ch)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to return Chirp"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal Returning Chirp Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	w.Write(returnChirp)
+	fmt.Printf("%+v", ch)
+}
+
 // MIDDLEWARE
 // middleware to do the actual counting of site visits
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -371,6 +441,7 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", cfg.addChirp)
 	mux.HandleFunc("POST /api/users", cfg.addUserHandler)
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirps)
+	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.getSpecificChirp)
 
 	//Serve content on connection
 	err = server.ListenAndServe()
