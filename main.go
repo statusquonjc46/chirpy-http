@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/statusquonjc46/chirpy-http/internal/auth"
 	"github.com/statusquonjc46/chirpy-http/internal/database"
 	"log"
 	"net/http"
@@ -56,9 +57,10 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 // Takes a POST request to create a user, adds to the users table, then returns the users row from the DB
 func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email string `json:"email"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
-	type Errors struct {
+	type returnErrors struct {
 		Error string `json:"error"`
 	}
 
@@ -66,7 +68,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		rtn := &Errors{Error: "something went wrong"}
+		rtn := &returnErrors{Error: "something went wrong"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
 			fmt.Printf("Error decoding json %s\n", err)
@@ -80,12 +82,62 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//Check to see if email or password are empty. Then get Email and Password from POST request, hash password
+	if params.Email == "" {
+		rtn := &returnErrors{Error: "Email is empty."}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		w.Write(dat)
+		return
+	}
+
+	if params.Password == "" {
+		rtn := &returnErrors{Error: "Password is empty."}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(400)
+		w.Write(dat)
+		return
+	}
+
 	email := sql.NullString{String: params.Email, Valid: true}
-	fmt.Println(email)
-	user, err := cfg.database.CreateUser(r.Context(), email)
-	fmt.Println(user)
+	password := params.Password
+
+	hash, err := auth.HashPassword(password)
 	if err != nil {
-		rtn := &Errors{Error: "failed to add user to db"}
+		rtn := &returnErrors{Error: "Failed to hash password."}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal password hash error: %s", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		fmt.Printf("Error hashing password: %s\n", err)
+		return
+	}
+
+	userParams := database.CreateUserParams{
+		Email:          email,
+		HashedPassword: hash,
+	}
+
+	user, err := cfg.database.CreateUser(r.Context(), userParams)
+	if err != nil {
+		rtn := &returnErrors{Error: "failed to add user to db"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
 			fmt.Printf("Error marshalling json for adding user to DB: %s\n", err)
@@ -114,6 +166,124 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
 	w.Write(dat)
+	fmt.Printf("%+v", ret)
+}
+
+// Perform User Authentication/Login
+func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	//decode POST request
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		rtn := &returnErrors{Error: "Unable to decode json POST request."}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal user login error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	if params.Email == "" {
+		rtn := &returnErrors{Error: "Incorrect email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal userLogin email check: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	if params.Password == "" {
+		rtn := &returnErrors{Error: "Incorrect email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal userLogin password check: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	email := sql.NullString{String: params.Email, Valid: true}
+
+	getUser, err := cfg.database.UserandHashLookup(r.Context(), email)
+	if err != nil {
+		rtn := &returnErrors{Error: "Incorrect email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal DB lookup error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	err = auth.CheckPasswordHash(getUser.HashedPassword, params.Password)
+	if err != nil {
+		rtn := &returnErrors{Error: "Incorrect email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal password hash check error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	authedUser := &User{
+		ID:        getUser.ID,
+		CreatedAt: getUser.CreatedAt,
+		UpdatedAt: getUser.UpdatedAt,
+		Email:     getUser.Email.String,
+	}
+
+	dat, err := json.Marshal(authedUser)
+	if err != nil {
+		rtn := &returnErrors{Error: "Error marshaling authed user struct"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal, the failed marshal of authed user", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(dat)
+	fmt.Printf("%+v", authedUser)
+
 }
 
 // validates chirp char lengths, censors banned words, then puts the full chirp in the chirp DB, and returns the full chirp
@@ -397,10 +567,11 @@ type apiConfig struct {
 }
 
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
+	ID             uuid.UUID `json:"id"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	Email          string    `json:"email"`
+	HashedPassword string    `json:"hashed_password"`
 }
 
 type Chirp struct {
@@ -442,6 +613,7 @@ func main() {
 	mux.HandleFunc("POST /api/users", cfg.addUserHandler)
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.getSpecificChirp)
+	mux.HandleFunc("POST /api/login", cfg.userLogin)
 
 	//Serve content on connection
 	err = server.ListenAndServe()
