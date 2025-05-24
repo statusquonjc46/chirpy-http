@@ -6,6 +6,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"net/http"
+	"strings"
 	"time"
 )
 
@@ -67,4 +69,16 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	} else {
 		return uuid.Nil, errors.New("Unknown Error in JWT Validation")
 	}
+}
+
+func GetBearerToken(headers http.Header) (string, error) {
+	bearer := headers.Get("Authorization")
+	if bearer == "" {
+		return "", errors.New("Bearer Token does not exist.")
+	} else if !strings.Contains(bearer, "Bearer ") {
+		return "", errors.New("Incorrectly formatted Bearer token.")
+	}
+
+	token := strings.TrimPrefix(bearer, "Bearer ")
+	return token, nil
 }

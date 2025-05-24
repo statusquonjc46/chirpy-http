@@ -172,8 +172,9 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 // Perform User Authentication/Login
 func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
+		Email            string `json:"email"`
+		Password         string `json:"password"`
+		ExpiresInSeconds *int   `json:"expires_in_seconds"`
 	}
 	type returnErrors struct {
 		Error string `json:"error"`
@@ -225,6 +226,13 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	expiration := 3600
+	if params.ExpiresInSeconds != nil {
+		if *params.ExpiresInSeconds < expiration {
+			expiration = *params.ExpiresInSeconds
+		}
+	}
+
 	email := sql.NullString{String: params.Email, Valid: true}
 
 	getUser, err := cfg.database.UserandHashLookup(r.Context(), email)
@@ -242,6 +250,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	token, err := auth.MakeJWT(getUser.ID, cfg.secret, time.Duration(expiration)*time.Second)
 	err = auth.CheckPasswordHash(getUser.HashedPassword, params.Password)
 	if err != nil {
 		rtn := &returnErrors{Error: "Incorrect email or password"}
@@ -262,6 +271,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: getUser.CreatedAt,
 		UpdatedAt: getUser.UpdatedAt,
 		Email:     getUser.Email.String,
+		Token:     token,
 	}
 
 	dat, err := json.Marshal(authedUser)
@@ -292,7 +302,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		Body   string `json:"body"`
 		UserID string `json:"user_id"`
 	}
-	type returnErr struct {
+	type returnErrors struct {
 		Error string `json:"error"`
 	}
 	type chirpParams struct {
@@ -305,7 +315,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		rtn := &returnErr{Error: "something went wrong"}
+		rtn := &returnErrors{Error: "something went wrong"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
 			fmt.Printf("Error marshalling json for POST data %s\n", err)
@@ -319,23 +329,38 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//check for banned words, then return the cleaned string
-	strBody := params.Body
-	userID, err := uuid.Parse(params.UserID) //parse string to UUID
+	token, err := auth.GetBearerToken(r.Header)
 	if err != nil {
-		rtn := &returnErr{Error: "unable to parse uuid from json POST"}
+		rtn := &returnErrors{Error: "Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json for chirp parameters %s\n", err)
-			w.WriteHeader(400)
+			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(400)
+		w.WriteHeader(401)
 		w.Write(dat)
-		fmt.Printf("UserID was not able to be parses from string to UUID: %s\n", err)
 		return
 	}
+
+	tokenUUID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		rtn := &returnErrors{Error: "JWT Validation Failed"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling JWT Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	//check for banned words, then return the cleaned string
+	strBody := params.Body
 
 	//valid chirp logic
 	chirpLen := len(strBody) //get length of body to check if 140 chars
@@ -356,10 +381,10 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(cleanBody)
 
 		//insert chirp to DB, save chirp to Chirp struct, r.context for ID, CreatedAt, UpdatedAt, cleanBody for cleanedbody
-		addChirpParams := database.AddChirpParams{Body: cleanBody, UserID: uuid.NullUUID{UUID: userID, Valid: true}}
+		addChirpParams := database.AddChirpParams{Body: cleanBody, UserID: uuid.NullUUID{UUID: tokenUUID, Valid: true}}
 		createChirp, err := cfg.database.AddChirp(r.Context(), addChirpParams)
 		if err != nil {
-			rtn := &returnErr{Error: "Failed to Add Chirp to DB"}
+			rtn := &returnErrors{Error: "Failed to Add Chirp to DB"}
 			dat, err := json.Marshal(rtn)
 			if err != nil {
 				fmt.Printf("Error marshalling chirp DB failure: %s\n", err)
@@ -402,7 +427,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("Chirp added to DB successfully\nChirp: %s | Length: %d \n", strBody, chirpLen)
 	} else { //chirp length is too logn error response
 		overage := chirpLen - 140
-		rtn := &returnErr{Error: "chirp is too long"}
+		rtn := &returnErrors{Error: "chirp is too long"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
 			fmt.Printf("Error marshalling json: %s", err)
@@ -564,6 +589,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	database       *database.Queries
 	platform       string
+	secret         string
 }
 
 type User struct {
@@ -572,6 +598,7 @@ type User struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 	Email          string    `json:"email"`
 	HashedPassword string    `json:"hashed_password"`
+	Token          string    `json:"token"`
 }
 
 type Chirp struct {
@@ -601,6 +628,7 @@ func main() {
 	db, err := sql.Open("postgres", dbURL)
 	dbQueries := database.New(db)
 	cfg.database = dbQueries
+	cfg.secret = os.Getenv("SECRET")
 
 	fmt.Printf("Attempting to serve at: %s\n", server.Addr)
 
