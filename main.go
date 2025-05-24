@@ -269,7 +269,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Error marshaling authed user struct"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal, the failed marshal of authed user", err)
+			fmt.Printf("Failed to marshal, the failed marshal of authed user: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
