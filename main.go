@@ -739,6 +739,183 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(204)
 }
 
+func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		AccessToken string `json:"token"`
+		Email       string `json:"email"`
+		Password    string `json:"password"`
+	}
+
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	//Decode POST data
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		rtn := &returnErrors{Error: "something went wrong"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Error marshalling json for POST data %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		fmt.Printf("Error decoding parameters: %s\n", err)
+		return
+	}
+
+	if params.Email == "" {
+		rtn := &returnErrors{Error: "Invalid entry for email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal userLogin email check: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	} else if !strings.Contains(params.Email, "@") {
+		rtn := &returnErrors{Error: "Invalid entry for email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal userLogin email check: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	if params.Password == "" {
+		rtn := &returnErrors{Error: "Invalid entry for email or password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal userLogin password check: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		rtn := &returnErrors{Error: "Invalid Bearer Token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	tokenUUID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		rtn := &returnErrors{Error: "JWT Validation Failed"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling JWT Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	hashed, err := auth.HashPassword(params.Password)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to Hash the new Password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal the password hasing error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	email := sql.NullString{String: params.Email, Valid: true}
+
+	updateParams := database.UpdateEmailAndPasswordParams{
+		Email:          email,
+		HashedPassword: hashed,
+		ID:             tokenUUID,
+	}
+
+	err = cfg.database.UpdateEmailAndPassword(r.Context(), updateParams)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to update email and password"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal update email/password error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	updatedUser, err := cfg.database.UserandHashLookup(r.Context(), email)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to lookup new user data"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal update user lookup error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+	newUser := &User{
+		ID:        updatedUser.ID,
+		CreatedAt: updatedUser.CreatedAt,
+		UpdatedAt: updatedUser.UpdatedAt,
+		Email:     updatedUser.Email.String,
+	}
+	dat, err := json.Marshal(newUser)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to marshal updated user resource"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal updated user error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(dat)
+}
+
 // MIDDLEWARE
 // middleware to do the actual counting of site visits
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -816,6 +993,7 @@ func main() {
 	mux.HandleFunc("POST /api/login", cfg.userLogin)
 	mux.HandleFunc("POST /api/refresh", cfg.checkRefreshToken)
 	mux.HandleFunc("POST /api/revoke", cfg.revokeRefreshToken)
+	mux.HandleFunc("PUT /api/users", cfg.updateUserLoginInfo)
 	//Serve content on connection
 	err = server.ListenAndServe()
 	if err != nil {
