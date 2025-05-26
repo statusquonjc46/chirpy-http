@@ -172,9 +172,8 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 // Perform User Authentication/Login
 func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
-		Email            string `json:"email"`
-		Password         string `json:"password"`
-		ExpiresInSeconds *int   `json:"expires_in_seconds"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
 	}
 	type returnErrors struct {
 		Error string `json:"error"`
@@ -226,13 +225,6 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiration := 3600
-	if params.ExpiresInSeconds != nil {
-		if *params.ExpiresInSeconds < expiration {
-			expiration = *params.ExpiresInSeconds
-		}
-	}
-
 	email := sql.NullString{String: params.Email, Valid: true}
 
 	getUser, err := cfg.database.UserandHashLookup(r.Context(), email)
@@ -250,7 +242,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := auth.MakeJWT(getUser.ID, cfg.secret, time.Duration(expiration)*time.Second)
+	token, err := auth.MakeJWT(getUser.ID, cfg.secret)
 	err = auth.CheckPasswordHash(getUser.HashedPassword, params.Password)
 	if err != nil {
 		rtn := &returnErrors{Error: "Incorrect email or password"}
@@ -266,12 +258,37 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to create refresh token."}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal refresh token error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	var zeroTime time.Time
+	refTokenStruct := database.AddRefreshTokenParams{
+		Token:     refreshToken,
+		UserID:    getUser.ID,
+		ExpiresAt: time.Now().UTC().AddDate(0, 0, 60),
+		RevokedAt: sql.NullTime{Time: zeroTime, Valid: false},
+	}
+	retRefreshToken, err := cfg.database.AddRefreshToken(r.Context(), refTokenStruct)
+
 	authedUser := &User{
 		ID:        getUser.ID,
 		CreatedAt: getUser.CreatedAt,
 		UpdatedAt: getUser.UpdatedAt,
 		Email:     getUser.Email.String,
 		Token:     token,
+		Refresh:   retRefreshToken.Token,
 	}
 
 	dat, err := json.Marshal(authedUser)
@@ -575,6 +592,153 @@ func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("%+v", ch)
 }
 
+func (cfg *apiConfig) checkRefreshToken(w http.ResponseWriter, r *http.Request) {
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	type returnToken struct {
+		Token string `json:"token"`
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		rtn := &returnErrors{Error: "Invalid Bearer Token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	refToken, err := cfg.database.GetUserFromRefreshToken(r.Context(), token)
+	if err != nil {
+		rtn := &returnErrors{Error: "Empty or Invalid Bearer Token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal bearer token lookup error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	if refToken.ExpiresAt.Before(time.Now()) || refToken.ExpiresAt.Equal(time.Now()) || refToken.RevokedAt.Valid == true {
+		rtn := &returnErrors{Error: "Refresh Token has expired or been revoked"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal expired bearer token error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	accessToken, err := auth.MakeJWT(refToken.UserID, cfg.secret)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to Create New Access Token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal JWT creation error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	retToken := returnToken{Token: accessToken}
+	dat, err := json.Marshal(retToken)
+	if err != nil {
+		fmt.Printf("Failed to marshal Access Token return struct: %s\n", err)
+		w.WriteHeader(500)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(dat)
+}
+
+func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request) {
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		rtn := &returnErrors{Error: "Invalid Bearer Token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	refToken, err := cfg.database.GetUserFromRefreshToken(r.Context(), token)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			rtn := &returnErrors{Error: "Invalid or Refresh Token does not exist"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("Failed to marshal invalid refresh token error: %s\n", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(401)
+			w.Write(dat)
+			return
+		} else {
+			rtn := &returnErrors{Error: "Operation Failed"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("Failed to marshal invalid refresh token error: %s\n", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(503)
+			w.Write(dat)
+			return
+		}
+	}
+
+	err = cfg.database.RevokeRefreshToken(r.Context(), refToken.Token)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to revoke refresh token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal revoking refresh token error:  %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(204)
+}
+
 // MIDDLEWARE
 // middleware to do the actual counting of site visits
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -599,6 +763,7 @@ type User struct {
 	Email          string    `json:"email"`
 	HashedPassword string    `json:"hashed_password"`
 	Token          string    `json:"token"`
+	Refresh        string    `json:"refresh_token"`
 }
 
 type Chirp struct {
@@ -607,6 +772,13 @@ type Chirp struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Body      string    `json:"body"`
 	UserID    uuid.UUID `json:"user_id"`
+}
+
+type RefreshToken struct {
+	Token     string       `json:"token"`
+	UserID    uuid.UUID    `json:"user_id"`
+	ExpiresAt time.Time    `json:"expires_at"`
+	Revoke    sql.NullTime `json:"revoked_at"`
 }
 
 func main() {
@@ -642,7 +814,8 @@ func main() {
 	mux.HandleFunc("GET /api/chirps", cfg.getAllChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.getSpecificChirp)
 	mux.HandleFunc("POST /api/login", cfg.userLogin)
-
+	mux.HandleFunc("POST /api/refresh", cfg.checkRefreshToken)
+	mux.HandleFunc("POST /api/revoke", cfg.revokeRefreshToken)
 	//Serve content on connection
 	err = server.ListenAndServe()
 	if err != nil {
