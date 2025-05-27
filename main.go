@@ -553,7 +553,7 @@ func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(503)
+		w.WriteHeader(404)
 		w.Write(dat)
 		return
 	}
@@ -916,6 +916,104 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 	w.Write(dat)
 }
 
+func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	chirpID, err := uuid.Parse(r.PathValue("chirpID"))
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to convert string Id from PathValue to uuid.UUID"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal string ID to uuid.UUID error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		return
+	}
+
+	chirpAtID, err := cfg.database.GetSpecificChirp(r.Context(), chirpID)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to query DB for chirpID"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal error from getting specific chirp from DB: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(404)
+		w.Write(dat)
+		return
+	}
+
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		rtn := &returnErrors{Error: "Invalid Bearer Token"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	tokenUUID, err := auth.ValidateJWT(token, cfg.secret)
+	if err != nil {
+		rtn := &returnErrors{Error: "JWT Validation Failed"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed marshaling JWT Error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	if chirpAtID.UserID.UUID != tokenUUID {
+		rtn := &returnErrors{Error: "Failed to delete chirp because requestor is not the author"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal failed auth chirp deletion error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(403)
+		w.Write(dat)
+		return
+	}
+
+	err = cfg.database.DeleteChirp(r.Context(), chirpID)
+	if err != nil {
+		rtn := &returnErrors{Error: "Failed to delete chirp"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal chirp deleteion error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(204)
+}
+
 // MIDDLEWARE
 // middleware to do the actual counting of site visits
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -994,6 +1092,8 @@ func main() {
 	mux.HandleFunc("POST /api/refresh", cfg.checkRefreshToken)
 	mux.HandleFunc("POST /api/revoke", cfg.revokeRefreshToken)
 	mux.HandleFunc("PUT /api/users", cfg.updateUserLoginInfo)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", cfg.deleteChirp)
+
 	//Serve content on connection
 	err = server.ListenAndServe()
 	if err != nil {
