@@ -155,6 +155,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email:     user.Email.String,
+		Red:       user.IsChirpyRed,
 	}
 
 	dat, err := json.Marshal(ret)
@@ -289,6 +290,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		Email:     getUser.Email.String,
 		Token:     token,
 		Refresh:   retRefreshToken.Token,
+		Red:       getUser.IsChirpyRed,
 	}
 
 	dat, err := json.Marshal(authedUser)
@@ -896,6 +898,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		CreatedAt: updatedUser.CreatedAt,
 		UpdatedAt: updatedUser.UpdatedAt,
 		Email:     updatedUser.Email.String,
+		Red:       updatedUser.IsChirpyRed,
 	}
 	dat, err := json.Marshal(newUser)
 	if err != nil {
@@ -1014,6 +1017,74 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 
+func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request) {
+	type parameters struct {
+		Event string `json:"event"`
+		Data  struct {
+			UserID uuid.UUID `json:"user_id"`
+		} `json:"data"`
+	}
+
+	type returnErrors struct {
+		Error string `json:"error"`
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		rtn := &returnErrors{Error: "something went wrong"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Error marshalling json for POST data %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(500)
+		w.Write(dat)
+		fmt.Printf("Error decoding parameters: %s\n", err)
+		return
+	}
+
+	if err := uuid.Validate(params.Data.UserID.String()); err != nil {
+		rtn := &returnErrors{Error: "Empty or Invalid Email Format"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal invalid email error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(503)
+		w.Write(dat)
+		return
+	}
+
+	if params.Event == "user.upgraded" {
+		err := cfg.database.UpgradeToChirpyRed(r.Context(), params.Data.UserID)
+		if err != nil {
+			rtn := &returnErrors{Error: "Failed to upgrade user to chirpy red"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("Failed to marshal upgrade to red error: %s\n", err)
+				w.WriteHeader(503)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(404)
+			w.Write(dat)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(204)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(204)
+	}
+
+}
+
 // MIDDLEWARE
 // middleware to do the actual counting of site visits
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
@@ -1039,6 +1110,7 @@ type User struct {
 	HashedPassword string    `json:"hashed_password"`
 	Token          string    `json:"token"`
 	Refresh        string    `json:"refresh_token"`
+	Red            bool      `json:"is_chirpy_red"`
 }
 
 type Chirp struct {
@@ -1093,6 +1165,7 @@ func main() {
 	mux.HandleFunc("POST /api/revoke", cfg.revokeRefreshToken)
 	mux.HandleFunc("PUT /api/users", cfg.updateUserLoginInfo)
 	mux.HandleFunc("DELETE /api/chirps/{chirpID}", cfg.deleteChirp)
+	mux.HandleFunc("POST /api/polka/webhooks", cfg.upgradeToChirpyRed)
 
 	//Serve content on connection
 	err = server.ListenAndServe()
