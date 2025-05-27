@@ -71,14 +71,14 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "something went wrong"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error decoding json %s\n", err)
+			fmt.Printf("[JSONERR] - Error decoding json %s\n", err)
 			w.WriteHeader(400)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(400)
 		w.Write(dat)
-		fmt.Printf("Error decoding parameters: %s\n", err)
+		fmt.Printf("[JSONERR] - Error decoding parameters: %s\n", err)
 		return
 	}
 
@@ -87,7 +87,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Email is empty."}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -101,7 +101,7 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Password is empty."}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -119,14 +119,14 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to hash password."}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal password hash error: %s", err)
+			fmt.Printf("[JSONERR] - Failed to marshal password hash error: %s", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(503)
 		w.Write(dat)
-		fmt.Printf("Error hashing password: %s\n", err)
+		fmt.Printf("[SERVERERR] - Error hashing password: %s\n", err)
 		return
 	}
 
@@ -140,14 +140,14 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "failed to add user to db"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json for adding user to DB: %s\n", err)
+			fmt.Printf("[JSONERR] - Error marshalling json for adding user to DB: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(500)
 		w.Write(dat)
-		fmt.Printf("Error adding user to DB: %s\n", err)
+		fmt.Printf("[JSONERR] - Error adding user to DB: %s\n", err)
 		return
 	}
 	ret := &User{
@@ -160,14 +160,14 @@ func (cfg *apiConfig) addUserHandler(w http.ResponseWriter, r *http.Request) {
 
 	dat, err := json.Marshal(ret)
 	if err != nil {
-		fmt.Printf("Error marshalling json for user Struct: %s\n", err)
+		fmt.Printf("[JSONERR] - Error marshalling json for user Struct: %s\n", err)
 		w.WriteHeader(500)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(201)
 	w.Write(dat)
-	fmt.Printf("%+v", ret)
+	fmt.Printf("[SERVER] - %+v", ret)
 }
 
 // Perform User Authentication/Login
@@ -188,7 +188,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Unable to decode json POST request."}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal user login error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal user login error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -202,7 +202,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Incorrect email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal userLogin email check: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal userLogin email check: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -216,7 +216,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Incorrect email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal userLogin password check: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal userLogin password check: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -233,7 +233,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Incorrect email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal DB lookup error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal DB lookup error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -249,7 +249,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Incorrect email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal password hash check error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal password hash check error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -264,7 +264,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to create refresh token."}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal refresh token error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal refresh token error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -298,7 +298,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Error marshaling authed user struct"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal, the failed marshal of authed user: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal, the failed marshal of authed user: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -311,7 +311,7 @@ func (cfg *apiConfig) userLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(dat)
-	fmt.Printf("%+v", authedUser)
+	fmt.Printf("[SERVER] - %+v", authedUser)
 
 }
 
@@ -337,14 +337,14 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "something went wrong"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json for POST data %s\n", err)
+			fmt.Printf("[JSONERR] - Error marshalling json for POST data %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(500)
 		w.Write(dat)
-		fmt.Printf("Error decoding parameters: %s\n", err)
+		fmt.Printf("[JSONERR] - Error decoding parameters: %s\n", err)
 		return
 	}
 
@@ -353,7 +353,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling Bearer Token Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -368,7 +368,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "JWT Validation Failed"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling JWT Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling JWT Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -406,7 +406,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 			rtn := &returnErrors{Error: "Failed to Add Chirp to DB"}
 			dat, err := json.Marshal(rtn)
 			if err != nil {
-				fmt.Printf("Error marshalling chirp DB failure: %s\n", err)
+				fmt.Printf("[JSONERR] - Error marshalling chirp DB failure: %s\n", err)
 				w.WriteHeader(500)
 				return
 			}
@@ -421,7 +421,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 			userID = createChirp.UserID.UUID
 		} else {
 			userID = uuid.Nil
-			fmt.Printf("Error: user id is nil: %s", userID)
+			fmt.Printf("[SERVERERR] - Error: user id is nil: %s", userID)
 		}
 
 		//create chirp instance with chirp data
@@ -436,20 +436,20 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		dat, err := json.Marshal(chirp)
 
 		if err != nil {
-			fmt.Printf("Error marshalling json for chirp: %s\n", err)
+			fmt.Printf("[JSONERR] - Error marshalling json for chirp: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(201)
 		w.Write(dat)
-		fmt.Printf("Chirp added to DB successfully\nChirp: %s | Length: %d \n", strBody, chirpLen)
+		fmt.Printf("[SERVER] - Chirp added to DB successfully\nChirp: %s | Length: %d \n", strBody, chirpLen)
 	} else { //chirp length is too logn error response
 		overage := chirpLen - 140
 		rtn := &returnErrors{Error: "chirp is too long"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json: %s", err)
+			fmt.Printf("[JSONERR] - Error marshalling json: %s", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -457,7 +457,7 @@ func (cfg *apiConfig) addChirp(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache control", "no-cache")
 		w.WriteHeader(400)
 		w.Write(dat)
-		fmt.Printf("Error: %d is greater than 140 characters by %d\n", chirpLen, overage)
+		fmt.Printf("[INPUTERR] - Error: %d is greater than 140 characters by %d\n", chirpLen, overage)
 		return
 	}
 }
@@ -468,12 +468,85 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 		Error string `json:"error"`
 	}
 
+	authorID := r.URL.Query().Get("author_id")
+	if authorID != "" {
+		userID, err := uuid.Parse(authorID)
+		if err != nil {
+			rtn := &returnErrors{Error: "Failed to convert author_id to UUID"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("[JSONERR] - Failed to marshal string to uuid conversion error: %s\n", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(503)
+			w.Write(dat)
+			return
+		}
+		chirpsByAuthor, err := cfg.database.GetChirpsByAuthor(r.Context(), uuid.NullUUID{UUID: userID, Valid: true})
+		if err != nil {
+			rtn := &returnErrors{Error: "AuthorID does not exist in DB"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("[JSONERR] - Failed to marshal chirp lookup by authorid error: %s\n", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(404)
+			w.Write(dat)
+			return
+		}
+
+		var jsonFormattedChirps []Chirp
+		for _, row := range chirpsByAuthor {
+
+			var userID uuid.UUID
+			if row.UserID.Valid {
+				userID = row.UserID.UUID
+			} else {
+				fmt.Printf("[SERVERERR] - Error: user id is nil: %s", userID)
+				continue
+			}
+
+			ch := Chirp{
+				ID:        row.ID,
+				CreatedAt: row.CreatedAt,
+				UpdatedAt: row.UpdatedAt,
+				Body:      row.Body,
+				UserID:    userID,
+			}
+
+			jsonFormattedChirps = append(jsonFormattedChirps, ch)
+		}
+
+		returnChirp, err := json.Marshal(jsonFormattedChirps)
+		if err != nil {
+			rtn := &returnErrors{Error: "Failed to marshal Array of Chirps"}
+			dat, err := json.Marshal(rtn)
+			if err != nil {
+				fmt.Printf("[JSONERR] - Failed to marshal Array of Chirps error: %s", err)
+				w.WriteHeader(500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(500)
+			w.Write(dat)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(200)
+		w.Write(returnChirp)
+		return
+	}
+
 	allChirps, err := cfg.database.GetAllChirps(r.Context())
 	if err != nil {
 		rtn := &returnErrors{Error: "Failed to query DB for all chirps"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal all chirp query error: %s", err)
+			fmt.Printf("[JSONERR] - Failed to marshal all chirp query error: %s", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -490,7 +563,7 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 		if row.UserID.Valid {
 			userID = row.UserID.UUID
 		} else {
-			fmt.Printf("Error: user id is nil: %s", userID)
+			fmt.Printf("[SERVERERR] - Error: user id is nil: %s", userID)
 			continue
 		}
 
@@ -510,7 +583,7 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to marshal Array of Chirps"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal Array of Chirps error: %s", err)
+			fmt.Printf("[JSONERR] - Failed to marshal Array of Chirps error: %s", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -535,7 +608,7 @@ func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to convert string Id from PathValue to uuid.UUID"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal string ID to uuid.UUID error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal string ID to uuid.UUID error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -550,7 +623,7 @@ func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to query DB for chirpID"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal error from getting specific chirp from DB: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal error from getting specific chirp from DB: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -564,7 +637,7 @@ func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
 	if chirpAtID.UserID.Valid {
 		userID = chirpAtID.UserID.UUID
 	} else {
-		fmt.Printf("Error: user id is nil: %s\n", userID)
+		fmt.Printf("[SERVERERR] - Error: user id is nil: %s\n", userID)
 	}
 	ch := Chirp{
 		ID:        chirpAtID.ID,
@@ -579,7 +652,7 @@ func (cfg *apiConfig) getSpecificChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to return Chirp"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal Returning Chirp Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal Returning Chirp Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -608,7 +681,7 @@ func (cfg *apiConfig) checkRefreshToken(w http.ResponseWriter, r *http.Request) 
 		rtn := &returnErrors{Error: "Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling Bearer Token Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -623,7 +696,7 @@ func (cfg *apiConfig) checkRefreshToken(w http.ResponseWriter, r *http.Request) 
 		rtn := &returnErrors{Error: "Empty or Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal bearer token lookup error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal bearer token lookup error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -637,7 +710,7 @@ func (cfg *apiConfig) checkRefreshToken(w http.ResponseWriter, r *http.Request) 
 		rtn := &returnErrors{Error: "Refresh Token has expired or been revoked"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal expired bearer token error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal expired bearer token error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -652,7 +725,7 @@ func (cfg *apiConfig) checkRefreshToken(w http.ResponseWriter, r *http.Request) 
 		rtn := &returnErrors{Error: "Failed to Create New Access Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal JWT creation error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal JWT creation error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -665,7 +738,7 @@ func (cfg *apiConfig) checkRefreshToken(w http.ResponseWriter, r *http.Request) 
 	retToken := returnToken{Token: accessToken}
 	dat, err := json.Marshal(retToken)
 	if err != nil {
-		fmt.Printf("Failed to marshal Access Token return struct: %s\n", err)
+		fmt.Printf("[JSONERR] - Failed to marshal Access Token return struct: %s\n", err)
 		w.WriteHeader(500)
 		return
 	}
@@ -684,7 +757,7 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 		rtn := &returnErrors{Error: "Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling Bearer Token Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -700,7 +773,7 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 			rtn := &returnErrors{Error: "Invalid or Refresh Token does not exist"}
 			dat, err := json.Marshal(rtn)
 			if err != nil {
-				fmt.Printf("Failed to marshal invalid refresh token error: %s\n", err)
+				fmt.Printf("[JSONERR] - Failed to marshal invalid refresh token error: %s\n", err)
 				w.WriteHeader(500)
 				return
 			}
@@ -712,7 +785,7 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 			rtn := &returnErrors{Error: "Operation Failed"}
 			dat, err := json.Marshal(rtn)
 			if err != nil {
-				fmt.Printf("Failed to marshal invalid refresh token error: %s\n", err)
+				fmt.Printf("[JSONERR] - Failed to marshal invalid refresh token error: %s\n", err)
 				w.WriteHeader(500)
 				return
 			}
@@ -728,7 +801,7 @@ func (cfg *apiConfig) revokeRefreshToken(w http.ResponseWriter, r *http.Request)
 		rtn := &returnErrors{Error: "Failed to revoke refresh token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal revoking refresh token error:  %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal revoking refresh token error:  %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -760,14 +833,14 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "something went wrong"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json for POST data %s\n", err)
+			fmt.Printf("[JSONERR] - Error marshalling json for POST data %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(500)
 		w.Write(dat)
-		fmt.Printf("Error decoding parameters: %s\n", err)
+		fmt.Printf("[JSONERR] - Error decoding parameters: %s\n", err)
 		return
 	}
 
@@ -775,7 +848,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Invalid entry for email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal userLogin email check: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal userLogin email check: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -787,7 +860,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Invalid entry for email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal userLogin email check: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal userLogin email check: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -801,7 +874,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Invalid entry for email or password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal userLogin password check: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal userLogin password check: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -816,7 +889,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling Bearer Token Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -831,7 +904,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "JWT Validation Failed"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling JWT Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling JWT Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -846,7 +919,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Failed to Hash the new Password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal the password hasing error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal the password hasing error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -869,7 +942,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Failed to update email and password"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal update email/password error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal update email/password error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -884,7 +957,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Failed to lookup new user data"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal update user lookup error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal update user lookup error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -905,7 +978,7 @@ func (cfg *apiConfig) updateUserLoginInfo(w http.ResponseWriter, r *http.Request
 		rtn := &returnErrors{Error: "Failed to marshal updated user resource"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal updated user error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal updated user error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -929,7 +1002,7 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to convert string Id from PathValue to uuid.UUID"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal string ID to uuid.UUID error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal string ID to uuid.UUID error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -944,7 +1017,7 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to query DB for chirpID"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal error from getting specific chirp from DB: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal error from getting specific chirp from DB: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -959,7 +1032,7 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Invalid Bearer Token"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling Bearer Token Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling Bearer Token Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -974,7 +1047,7 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "JWT Validation Failed"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed marshaling JWT Error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed marshaling JWT Error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -988,7 +1061,7 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to delete chirp because requestor is not the author"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal failed auth chirp deletion error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal failed auth chirp deletion error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -1003,7 +1076,7 @@ func (cfg *apiConfig) deleteChirp(w http.ResponseWriter, r *http.Request) {
 		rtn := &returnErrors{Error: "Failed to delete chirp"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal chirp deleteion error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal chirp deleteion error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -1033,10 +1106,10 @@ func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request)
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		rtn := &returnErrors{Error: "something went wrong"}
+		rtn := &returnErrors{Error: "json Decode failure"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Error marshalling json for POST data %s\n", err)
+			fmt.Printf("[JSONERR] - Error marshalling json for POST data %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -1052,7 +1125,7 @@ func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request)
 		rtn := &returnErrors{Error: "Invalid or no API Key Found"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal API key error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal API key error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -1066,7 +1139,7 @@ func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request)
 		rtn := &returnErrors{Error: "Invalid Polka API Key in request"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal invalid api key error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal invalid api key error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -1080,7 +1153,7 @@ func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request)
 		rtn := &returnErrors{Error: "Empty or Invalid Email Format"}
 		dat, err := json.Marshal(rtn)
 		if err != nil {
-			fmt.Printf("Failed to marshal invalid email error: %s\n", err)
+			fmt.Printf("[JSONERR] - Failed to marshal invalid email error: %s\n", err)
 			w.WriteHeader(500)
 			return
 		}
@@ -1096,7 +1169,7 @@ func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request)
 			rtn := &returnErrors{Error: "Failed to upgrade user to chirpy red"}
 			dat, err := json.Marshal(rtn)
 			if err != nil {
-				fmt.Printf("Failed to marshal upgrade to red error: %s\n", err)
+				fmt.Printf("[JSONERR] - Failed to marshal upgrade to red error: %s\n", err)
 				w.WriteHeader(503)
 				return
 			}
@@ -1180,7 +1253,7 @@ func main() {
 	cfg.secret = os.Getenv("SECRET")
 	cfg.polka = os.Getenv("POLKA_KEY")
 
-	fmt.Printf("Attempting to serve at: %s\n", server.Addr)
+	fmt.Printf("[SERVER] - Attempting to serve at http://localhost:%s\n", server.Addr)
 
 	//connection handlers/rputers
 	mux.Handle("/app/", cfg.middlewareMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
@@ -1201,6 +1274,8 @@ func main() {
 	//Serve content on connection
 	err = server.ListenAndServe()
 	if err != nil {
-		fmt.Printf("Failed at ListenAndServe: %s", err)
+		fmt.Printf("[ERR} - Failed at ListenAndServe: %s\n", err)
 	}
+
+	fmt.Printf("[SERVER] - Closing at http://localhost:%s\n", server.Addr)
 }
