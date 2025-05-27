@@ -92,3 +92,16 @@ func MakeRefreshToken() (string, error) {
 	encodedToken := hex.EncodeToString(rawToken)
 	return encodedToken, nil
 }
+
+func GetAPIKey(headers http.Header) (string, error) {
+	//Authorization: ApiKey THE_KEY_HERE
+	polkaAPI := headers.Get("Authorization")
+	if polkaAPI == "" {
+		return "", errors.New("API Key is empty.")
+	} else if !strings.Contains(polkaAPI, "ApiKey ") {
+		return "", errors.New("Incorrectly formatted ApiKey token.")
+	}
+
+	apiKey := strings.TrimPrefix(polkaAPI, "ApiKey ")
+	return apiKey, nil
+}

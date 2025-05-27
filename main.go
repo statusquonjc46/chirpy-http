@@ -1047,6 +1047,35 @@ func (cfg *apiConfig) upgradeToChirpyRed(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		rtn := &returnErrors{Error: "Invalid or no API Key Found"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal API key error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
+	if apiKey != cfg.polka {
+		rtn := &returnErrors{Error: "Invalid Polka API Key in request"}
+		dat, err := json.Marshal(rtn)
+		if err != nil {
+			fmt.Printf("Failed to marshal invalid api key error: %s\n", err)
+			w.WriteHeader(500)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(401)
+		w.Write(dat)
+		return
+	}
+
 	if err := uuid.Validate(params.Data.UserID.String()); err != nil {
 		rtn := &returnErrors{Error: "Empty or Invalid Email Format"}
 		dat, err := json.Marshal(rtn)
@@ -1100,6 +1129,7 @@ type apiConfig struct {
 	database       *database.Queries
 	platform       string
 	secret         string
+	polka          string
 }
 
 type User struct {
@@ -1148,6 +1178,7 @@ func main() {
 	dbQueries := database.New(db)
 	cfg.database = dbQueries
 	cfg.secret = os.Getenv("SECRET")
+	cfg.polka = os.Getenv("POLKA_KEY")
 
 	fmt.Printf("Attempting to serve at: %s\n", server.Addr)
 
