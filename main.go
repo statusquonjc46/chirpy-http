@@ -12,6 +12,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -521,6 +522,12 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 			jsonFormattedChirps = append(jsonFormattedChirps, ch)
 		}
 
+		if r.URL.Query().Get("sort") == "desc" {
+			sort.Slice(jsonFormattedChirps, func(i, j int) bool { return jsonFormattedChirps[i].CreatedAt.After(jsonFormattedChirps[j].CreatedAt) })
+		} else {
+			sort.Slice(jsonFormattedChirps, func(i, j int) bool { return jsonFormattedChirps[i].CreatedAt.Before(jsonFormattedChirps[j].CreatedAt) })
+		}
+
 		returnChirp, err := json.Marshal(jsonFormattedChirps)
 		if err != nil {
 			rtn := &returnErrors{Error: "Failed to marshal Array of Chirps"}
@@ -576,6 +583,12 @@ func (cfg *apiConfig) getAllChirps(w http.ResponseWriter, r *http.Request) {
 		}
 
 		jsonFormattedChirps = append(jsonFormattedChirps, ch)
+	}
+
+	if r.URL.Query().Get("sort") == "desc" {
+		sort.Slice(jsonFormattedChirps, func(i, j int) bool { return jsonFormattedChirps[i].CreatedAt.After(jsonFormattedChirps[j].CreatedAt) })
+	} else {
+		sort.Slice(jsonFormattedChirps, func(i, j int) bool { return jsonFormattedChirps[i].CreatedAt.Before(jsonFormattedChirps[j].CreatedAt) })
 	}
 
 	returnChirp, err := json.Marshal(jsonFormattedChirps)
